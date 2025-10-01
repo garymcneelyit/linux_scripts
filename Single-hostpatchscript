@@ -1,0 +1,50 @@
+##Single-host patch script (Debian / Ubuntu)##
+#!/usr/bin/env bash
+# patch-ubuntu.sh
+set -euo pipefail
+
+LOG="/var/log/patch-$(date +%F-%T).log"
+DRY_RUN=false
+
+usage() {
+  echo "Usage: $0 [--dry-run]"
+  exit 1
+}
+
+if [[ "${1:-}" == "--dry-run" ]]; then
+  DRY_RUN=true
+fi
+
+echo "Starting patch run: $(date)" | tee -a "$LOG"
+
+if $DRY_RUN; then
+  echo "DRY RUN: Checking available upgrades..." | tee -a "$LOG"
+  apt-get update 2>&1 | tee -a "$LOG"
+  apt-get -s upgrade 2>&1 | tee -a "$LOG"
+  echo "DRY RUN complete." | tee -a "$LOG"
+  exit 0
+fi
+
+# Update package lists
+echo "Updating package lists..." | tee -a "$LOG"
+apt-get update 2>&1 | tee -a "$LOG"
+
+# Apply upgrades
+echo "Applying upgrades..." | tee -a "$LOG"
+DEBIAN_FRONTEND=noninteractive apt-get -y upgrade 2>&1 | tee -a "$LOG"
+DEBIAN_FRONTEND=noninteractive apt-get -y dist-upgrade 2>&1 | tee -a "$LOG"
+
+# Clean up
+echo "Cleaning apt cache..." | tee -a "$LOG"
+apt-get -y autoremove 2>&1 | tee -a "$LOG"
+apt-get -y autoclean 2>&1 | tee -a "$LOG"
+
+# Check if a reboot is required (Debian/Ubuntu writes this file when kernel or other reboot required package updated)
+if [[ -f /var/run/reboot-required ]]; then
+  echo "Reboot required. Rebooting now..." | tee -a "$LOG"
+  /sbin/shutdown -r +1 "Rebooting after package updates" &>> "$LOG" || true
+else
+  echo "No reboot required." | tee -a "$LOG"
+fi
+
+echo "Patch run completed: $(date)" | tee -a "$LOG"
