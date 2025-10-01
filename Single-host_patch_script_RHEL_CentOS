@@ -1,0 +1,63 @@
+###This script updates via dnf (fallback to yum), checks for kernel change, and reboots if necessary.###
+
+
+
+#!/usr/bin/env bash
+# patch-rhel.sh
+set -euo pipefail
+
+LOG="/var/log/patch-$(date +%F-%T).log"
+PKG_MGR=""
+
+# decide package manager
+if command -v dnf >/dev/null 2>&1; then
+  PKG_MGR="dnf"
+elif command -v yum >/dev/null 2>&1; then
+  PKG_MGR="yum"
+else
+  echo "No yum/dnf found" >&2
+  exit 2
+fi
+
+echo "Starting patch run on $(hostname) with $PKG_MGR at $(date)" | tee -a "$LOG"
+
+# Save current kernel
+OLD_KERNEL="$(uname -r)"
+echo "Current kernel: $OLD_KERNEL" | tee -a "$LOG"
+
+# refresh repos
+$PKG_MGR -y check-update 2>&1 | tee -a "$LOG" || true
+
+# update packages
+$PKG_MGR -y update 2>&1 | tee -a "$LOG"
+
+# optional: install yum-utils and check needs-restarting (detects services or kernel needing restart)
+if command -v needs-restarting >/dev/null 2>&1; then
+  echo "Checking for processes needing restart..." | tee -a "$LOG"
+  needs-restarting -r 2>&1 | tee -a "$LOG" || true
+fi
+
+# detect kernel change by checking /boot or rpm query
+NEW_KERNEL="$(rpm -q --last kernel | head -n1 2>/dev/null || true)"
+echo "Installed kernel info: $NEW_KERNEL" | tee -a "$LOG"
+
+if [[ "$OLD_KERNEL" != "$(uname -r)" ]]; then
+  echo "Kernel changed. Rebooting in 1 minute..." | tee -a "$LOG"
+  /sbin/shutdown -r +1 "Rebooting after kernel update" &>> "$LOG" || true
+else
+  # If package manager installed a new kernel we may need to reboot even if uname still shows old kernel
+  if rpm -q kernel >/dev/null 2>&1; then
+    LATEST_KERNEL="$(rpm -q --last kernel | head -n1 | awk '{print $1}')"
+    if ! echo "$OLD_KERNEL" | grep -q "${LATEST_KERNEL%%-*}"; then
+      echo "New kernel package installed. Rebooting in 1 minute..." | tee -a "$LOG"
+      /sbin/shutdown -r +1 "Rebooting after kernel update" &>> "$LOG" || true
+    else
+      echo "No kernel change detected that requires reboot." | tee -a "$LOG"
+    fi
+  fi
+fi
+
+echo "Patch run completed: $(date)" | tee -a "$LOG"
+
+
+###Run: sudo ./patch-rhel.sh
