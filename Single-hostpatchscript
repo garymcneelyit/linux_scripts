@@ -48,3 +48,6 @@ else
 fi
 
 echo "Patch run completed: $(date)" | tee -a "$LOG"
+
+
+#### sudo ./patch-ubuntu.sh --dry-run or sudo ./patch-ubuntu.sh########
