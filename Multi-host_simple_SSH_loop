@@ -1,0 +1,27 @@
+##Not as robust as config-management tools — good for quick jobs. Requires SSH key access.
+
+
+
+#!/usr/bin/env bash
+# patch-multi.sh - very simple
+HOSTS=("host1.example.com" "host2.example.com" "10.0.0.5")
+USER="admin"
+SCRIPT="/tmp/remote-patch.sh"
+
+# copy the appropriate script to remote hosts first (example uses patch-ubuntu.sh)
+for h in "${HOSTS[@]}"; do
+  echo "Copying patch script to $h..."
+  scp patch-ubuntu.sh ${USER}@${h}:${SCRIPT}
+done
+
+# execute in parallel (or sequentially)
+for h in "${HOSTS[@]}"; do
+  echo "Running patch on $h..."
+  ssh ${USER}@${h} "sudo bash ${SCRIPT} --dry-run" &
+done
+
+wait
+echo "All jobs triggered."
+
+
+##Notes: use parallel-ssh, pssh
