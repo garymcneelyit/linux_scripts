@@ -34,3 +34,100 @@ Backend: Node.js + Express
 Database: MongoDB / PostgreSQL
 
 Optional API: Food database API
+
+
++++++++++++++++++++++++++++++++++++++++++++
+Web App (React + Node.js)
+Backend (Node.js + Express
+
+// server.js
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// MongoDB model
+const FoodLog = mongoose.model('FoodLog', new mongoose.Schema({
+  userId: String,
+  foodName: String,
+  calories: Number,
+  protein: Number,
+  carbs: Number,
+  fats: Number,
+  date: { type: Date, default: Date.now }
+}));
+
+// Add food
+app.post('/api/food', async (req, res) => {
+  const log = new FoodLog(req.body);
+  await log.save();
+  res.send(log);
+});
+
+// Get daily logs
+app.get('/api/food/:userId/:date', async (req, res) => {
+  const { userId, date } = req.params;
+  const start = new Date(date);
+  const end = new Date(date);
+  end.setDate(end.getDate() + 1);
+  const logs = await FoodLog.find({ userId, date: { $gte: start, $lt: end } });
+  res.send(logs);
+});
+
+// Connect DB & start server
+mongoose.connect('mongodb://localhost:27017/foodtracker', { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => app.listen(5000, () => console.log('Server running on port 5000')))
+  .catch(err => console.error(err));
+
+
++++++++++
+
+
+Frontend (React)
+
+// App.js
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+
+function App() {
+  const [food, setFood] = useState('');
+  const [calories, setCalories] = useState('');
+  const [logs, setLogs] = useState([]);
+
+  const userId = "user123";
+  const today = new Date().toISOString().split('T')[0];
+
+  const addFood = async () => {
+    await axios.post('http://localhost:5000/api/food', { userId, foodName: food, calories });
+    fetchLogs();
+  }
+
+  const fetchLogs = async () => {
+    const res = await axios.get(`http://localhost:5000/api/food/${userId}/${today}`);
+    setLogs(res.data);
+  }
+
+  useEffect(() => {
+    fetchLogs();
+  }, []);
+
+  return (
+    <div>
+      <h1>Food Tracker</h1>
+      <input placeholder="Food" value={food} onChange={e => setFood(e.target.value)} />
+      <input placeholder="Calories" value={calories} onChange={e => setCalories(e.target.value)} />
+      <button onClick={addFood}>Add Food</button>
+      <h2>Today's Logs</h2>
+      <ul>
+        {logs.map(log => <li key={log._id}>{log.foodName} - {log.calories} cal</li>)}
+      </ul>
+    </div>
+  );
+}
+
+export default App;
+
+
