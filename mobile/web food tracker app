@@ -1,0 +1,40 @@
+#mobile/web food tracker app that can log meals, track calories, and maybe nutrients
+
+
+Core Features
+
+User Authentication: Sign up / login.
+
+Food Logging: Add meals with food name, calories, macronutrients (optional), date/time.
+
+Daily Summary: Show total calories, protein, carbs, fats.
+
+History: View past days’ food logs.
+
+Search Food Database: Optional integration with a food API (e.g., Nutritionix or Edamam) to get calorie info automatically.
+
+Reminders: Optional notifications to log meals.
+
+
+
+Tech Stack Options
+Mobile App (React Native)
+
+Frontend: React Native + Expo
+
+Backend: Node.js + Express
+
+Database: Firebase or MongoDB
+
+Optional API: Nutritionix API for food info
+
+Web App
+
+Frontend: React.js
+
+Backend: Node.js + Express
+
+Database: MongoDB / PostgreSQL
+
+Optional API: Food database API
+
