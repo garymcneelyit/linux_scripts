@@ -1,0 +1,114 @@
+
+##
+Example Inventory (inventory.ini)
+[linux_servers]
+rhel-server ansible_host=192.168.1.10 ansible_user=admin
+ubuntu-server ansible_host=192.168.1.20 ansible_user=ubuntu
+
+##
+
+
+- name: Persistently update DNS settings on Linux servers
+  hosts: linux_servers
+  become: yes
+  gather_facts: yes
+
+  vars:
+    dns_servers:
+      - 8.8.8.8
+      - 8.8.4.4
+    dns_search_domains:
+      - example.com
+
+  tasks:
+
+    - name: Backup resolv.conf before changes
+      copy:
+        src: /etc/resolv.conf
+        dest: /etc/resolv.conf.backup
+        remote_src: yes
+        backup: yes
+
+    ########################################################################
+    # SECTION 1: RHEL / CentOS / Rocky / AlmaLinux (NetworkManager-based)
+    ########################################################################
+    - name: Configure DNS using nmcli (NetworkManager)
+      block:
+        - name: Get active connection name
+          command: nmcli -t -f NAME con show --active
+          register: nmcli_connection
+
+        - name: Set DNS servers for the active connection
+          command: >
+            nmcli con mod "{{ nmcli_connection.stdout_lines[0] }}"
+            ipv4.dns "{{ dns_servers | join(' ') }}"
+            ipv4.ignore-auto-dns yes
+
+        - name: Set DNS search domains
+          command: >
+            nmcli con mod "{{ nmcli_connection.stdout_lines[0] }}"
+            ipv4.dns-search "{{ dns_search_domains | join(' ') }}"
+
+        - name: Bring connection down and up to apply DNS changes
+          command: >
+            nmcli con down "{{ nmcli_connection.stdout_lines[0] }}" && nmcli con up "{{ nmcli_connection.stdout_lines[0] }}"
+      when:
+        - ansible_facts['os_family'] == "RedHat"
+        - "'NetworkManager' in ansible_facts['services']"
+
+    ########################################################################
+    # SECTION 2: Ubuntu / Debian (Netplan-based)
+    ########################################################################
+    - name: Configure DNS via Netplan
+      block:
+        - name: Find existing Netplan config file
+          find:
+            paths: /etc/netplan
+            patterns: "*.yaml"
+          register: netplan_files
+
+        - name: Update DNS settings in Netplan
+          lineinfile:
+            path: "{{ item.path }}"
+            regexp: '^\s*dns:'
+            line: "        dns:\n            nameservers:\n                addresses: [{{ dns_servers | join(', ') }}]\n            search: [{{ dns_search_domains | join(', ') }}]"
+            insertafter: '^\s*ethernets:'
+          loop: "{{ netplan_files.files }}"
+          when: netplan_files.matched > 0
+
+        - name: Apply Netplan changes
+          command: netplan apply
+      when: ansible_facts['os_family'] == "Debian"
+
+    ########################################################################
+    # SECTION 3: Fallback for systems without NetworkManager or Netplan
+    ########################################################################
+    - name: Fallback - Update /etc/resolv.conf directly
+      blockinfile:
+        path: /etc/resolv.conf
+        create: yes
+        block: |
+          {% for dns in dns_servers %}
+          nameserver {{ dns }}
+          {% endfor %}
+          {% for domain in dns_search_domains %}
+          search {{ domain }}
+          {% endfor %}
+      when:
+        - ansible_facts['os_family'] not in ["RedHat", "Debian"]
+
+    ########################################################################
+    # Verification
+    ########################################################################
+    - name: Verify DNS configuration
+      command: cat /etc/resolv.conf
+      register: dns_output
+
+    - debug:
+        msg: "Updated DNS configuration:\n{{ dns_output.stdout }}"
+
+Run the Playbook
+ansible-playbook -i inventory.ini update_dns_persistent.yml
+
+you have to restart network services after DNS change (for example systemctl restart NetworkManager or systemctl restart networking
+
