@@ -1,0 +1,56 @@
+Update DNS on Linux Servers not persistent
+
+##
+Example Inventory (inventory.ini)
+[linux_servers]
+server1 ansible_host=192.168.1.10 ansible_user=admin
+server2 ansible_host=192.168.1.11 ansible_user=admin
+
+##
+
+---
+- name: Update DNS settings on Linux servers
+  hosts: linux_servers
+  become: yes
+  gather_facts: yes
+
+  vars:
+    dns_servers:
+      - 8.8.8.8
+      - 8.8.4.4
+    dns_search_domains:
+      - example.com
+
+  tasks:
+
+    - name: Backup current resolv.conf
+      copy:
+        src: /etc/resolv.conf
+        dest: /etc/resolv.conf.backup
+        remote_src: yes
+        backup: yes
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Update resolv.conf with new DNS servers
+      blockinfile:
+        path: /etc/resolv.conf
+        create: yes
+        block: |
+          {% for dns in dns_servers %}
+          nameserver {{ dns }}
+          {% endfor %}
+          {% for domain in dns_search_domains %}
+          search {{ domain }}
+          {% endfor %}
+      when: ansible_facts['os_family'] != 'Windows'
+
+    - name: Verify DNS configuration
+      command: cat /etc/resolv.conf
+      register: dns_output
+
+    - debug:
+        msg: "Updated DNS configuration:\n{{ dns_output.stdout }}"
+
+
+Run the playbook
+ansible-playbook -i inventory.ini update_dns.yml
